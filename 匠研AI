@@ -1,0 +1,250 @@
+import os
+import cv2
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras import layers, models
+from datetime import datetime
+from typing import List, Tuple, Dict, Optional
+
+class ArtisanAI:
+    """
+    匠研AI智能检测系统核心类
+    集自动标注、模型训练与智能检测功能于一体
+    """
+    
+    def __init__(self, model_name: str = "artisan_ai_model"):
+        """
+        初始化匠研AI系统
+        :param model_name: 模型名称
+        """
+        self.model_name = model_name
+        self.model = None
+        self.classes = []
+        self.label_map = {}
+        self.input_shape = (224, 224, 3)  # 默认输入尺寸
+        
+        # 创建必要目录
+        self._create_directories()
+        
+        # 初始化日志系统
+        self._init_logging()
+        
+        print(f"匠研AI智能检测系统 v1.0 初始化完成 - {datetime.now()}")
+    
+    def _create_directories(self):
+        """创建系统所需目录结构"""
+        dirs = ["datasets", "models", "annotations", "exports", "logs"]
+        for dir_name in dirs:
+            os.makedirs(dir_name, exist_ok=True)
+    
+    def _init_logging(self):
+        """初始化日志系统"""
+        log_file = f"logs/artisan_ai_{datetime.now().strftime('%Y%m%d_%H%M%S')}.log"
+        self.logger = tf.get_logger()
+        self.logger.setLevel('INFO')
+        # 这里可以添加更详细的日志配置
+    
+    def auto_annotate(self, image_dir: str, annotation_type: str = "rect"):
+        """
+        自动标注功能
+        :param image_dir: 图像目录路径
+        :param annotation_type: 标注类型 (rect/polygon)
+        """
+        print(f"开始自动标注: {image_dir}")
+        
+        # 这里应该实现具体的自动标注逻辑
+        # 示例: 使用预训练模型进行初步标注
+        
+        # 伪代码示例
+        for img_file in os.listdir(image_dir):
+            if img_file.lower().endswith(('.png', '.jpg', '.jpeg')):
+                img_path = os.path.join(image_dir, img_file)
+                image = cv2.imread(img_path)
+                
+                # 这里应该调用实际的自动标注算法
+                # 示例: 使用OpenCV的简单物体检测
+                gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+                _, threshold = cv2.threshold(gray, 127, 255, cv2.THRESH_BINARY)
+                contours, _ = cv2.findContours(threshold, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+                
+                # 保存标注结果
+                self._save_annotation(img_file, contours, annotation_type)
+        
+        print(f"自动标注完成，结果保存在 annotations/ 目录")
+    
+    def _save_annotation(self, img_file: str, contours, annotation_type: str):
+        """保存标注结果"""
+        # 实际实现中应该保存为标准的标注格式(如COCO、Pascal VOC等)
+        annotation_file = os.path.join("annotations", f"{os.path.splitext(img_file)[0]}.txt")
+        with open(annotation_file, 'w') as f:
+            for contour in contours:
+                if len(contour) >= 3:  # 至少3个点才能形成多边形
+                    if annotation_type == "rect":
+                        x, y, w, h = cv2.boundingRect(contour)
+                        f.write(f"rect {x} {y} {x+w} {y+h}\n")
+                    else:
+                        points = " ".join([f"{p[0][0]} {p[0][1]}" for p in contour])
+                        f.write(f"polygon {points}\n")
+    
+    def build_model(self, num_classes: int, input_shape: Tuple[int, int, int] = None):
+        """
+        构建检测模型
+        :param num_classes: 类别数量
+        :param input_shape: 输入图像形状 (height, width, channels)
+        """
+        if input_shape is not None:
+            self.input_shape = input_shape
+        
+        print(f"构建检测模型，输入形状: {self.input_shape}, 类别数: {num_classes}")
+        
+        # 使用TensorFlow/Keras构建一个简单的CNN模型
+        inputs = tf.keras.Input(shape=self.input_shape)
+        
+        # 特征提取器
+        x = layers.Conv2D(32, (3, 3), activation='relu')(inputs)
+        x = layers.MaxPooling2D((2, 2))(x)
+        x = layers.Conv2D(64, (3, 3), activation='relu')(x)
+        x = layers.MaxPooling2D((2, 2))(x)
+        x = layers.Conv2D(64, (3, 3), activation='relu')(x)
+        
+        # 分类头
+        x = layers.Flatten()(x)
+        x = layers.Dense(64, activation='relu')(x)
+        outputs = layers.Dense(num_classes, activation='softmax')(x)
+        
+        # 创建模型
+        self.model = models.Model(inputs=inputs, outputs=outputs)
+        
+        # 编译模型
+        self.model.compile(optimizer='adam',
+                          loss='sparse_categorical_crossentropy',
+                          metrics=['accuracy'])
+        
+        print("模型构建完成，可以使用train_model方法进行训练")
+    
+    def train_model(self, dataset_dir: str, epochs: int = 10, batch_size: int = 32):
+        """
+        训练模型
+        :param dataset_dir: 数据集目录
+        :param epochs: 训练轮数
+        :param batch_size: 批大小
+        """
+        if self.model is None:
+            raise ValueError("请先使用build_model方法构建模型")
+        
+        print(f"开始训练模型，数据集: {dataset_dir}")
+        
+        # 这里应该实现数据加载和预处理
+        # 示例: 使用ImageDataGenerator加载图像
+        train_datagen = tf.keras.preprocessing.image.ImageDataGenerator(
+            rescale=1./255,
+            validation_split=0.2  # 使用20%数据作为验证集
+        )
+        
+        # 加载训练数据
+        train_generator = train_datagen.flow_from_directory(
+            dataset_dir,
+            target_size=self.input_shape[:2],
+            batch_size=batch_size,
+            class_mode='sparse',
+            subset='training'
+        )
+        
+        # 加载验证数据
+        validation_generator = train_datagen.flow_from_directory(
+            dataset_dir,
+            target_size=self.input_shape[:2],
+            batch_size=batch_size,
+            class_mode='sparse',
+            subset='validation'
+        )
+        
+        # 记录类别信息
+        self.classes = list(train_generator.class_indices.keys())
+        self.label_map = {v: k for k, v in train_generator.class_indices.items()}
+        
+        # 训练模型
+        history = self.model.fit(
+            train_generator,
+            epochs=epochs,
+            validation_data=validation_generator
+        )
+        
+        # 保存模型
+        model_path = os.path.join("models", f"{self.model_name}.h5")
+        self.model.save(model_path)
+        print(f"模型训练完成，已保存到: {model_path}")
+        
+        return history
+    
+    def detect(self, image_path: str, confidence_threshold: float = 0.5):
+        """
+        智能检测功能
+        :param image_path: 图像路径
+        :param confidence_threshold: 置信度阈值
+        :return: 检测结果 (类别, 置信度, 边界框)
+        """
+        if self.model is None:
+            raise ValueError("请先加载或训练模型")
+        
+        # 加载并预处理图像
+        image = cv2.imread(image_path)
+        if image is None:
+            raise ValueError(f"无法加载图像: {image_path}")
+        
+        # 调整大小并归一化
+        input_image = cv2.resize(image, self.input_shape[:2])
+        input_image = input_image / 255.0
+        input_image = np.expand_dims(input_image, axis=0)
+        
+        # 进行预测
+        predictions = self.model.predict(input_image)
+        predicted_class = np.argmax(predictions[0])
+        confidence = np.max(predictions[0])
+        
+        # 如果置信度低于阈值，返回未知
+        if confidence < confidence_threshold:
+            return "unknown", confidence, None
+        
+        # 获取类别名称
+        class_name = self.label_map.get(predicted_class, "unknown")
+        
+        # 在实际实现中，这里应该返回检测到的物体位置信息
+        # 示例中简化处理，返回整个图像作为边界框
+        bbox = (0, 0, image.shape[1], image.shape[0])
+        
+        return class_name, float(confidence), bbox
+    
+    def export_model(self, format_type: str = "tflite"):
+        """
+        导出模型为不同格式
+        :param format_type: 导出格式 (tflite, saved_model, h5)
+        """
+        if self.model is None:
+            raise ValueError("没有可导出的模型")
+        
+        export_dir = "exports"
+        os.makedirs(export_dir, exist_ok=True)
+        
+        if format_type == "tflite":
+            # 转换为TFLite格式
+            converter = tf.lite.TFLiteConverter.from_keras_model(self.model)
+            tflite_model = converter.convert()
+            
+            # 保存模型
+            tflite_path = os.path.join(export_dir, f"{self.model_name}.tflite")
+            with open(tflite_path, 'wb') as f:
+                f.write(tflite_model)
+            print(f"模型已导出为TFLite格式: {tflite_path}")
+        
+        elif format_type == "saved_model":
+            # 导出为SavedModel格式
+            saved_model_path = os.path.join(export_dir, f"{self.model_name}_saved_model")
+            self.model.save(saved_model_path, save_format='tf')
+            print(f"模型已导出为SavedModel格式: {saved_model_path}")
+        
+        else:
+            # 默认保存为H5格式
+            h5_path = os.path.join(export_dir, f"{self.model_name}.h5")
+            self.model.save(h5_path)
+            print(f"模型已导出为H5格式: {h5_path}")
