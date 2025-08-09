@@ -1,0 +1,142 @@
+import math
+
+class DynamicBalancing:
+    def __init__(self, correction_radius):
+        """
+        初始化动平衡计算器
+        :param correction_radius: 校正质量安装半径 (m)
+        """
+        self.correction_radius = correction_radius
+        self.measurements = []  # 存储测量数据 [(角度, 振幅)]
+        self.correction_mass = None  # 校正质量 (kg)
+        self.correction_angle = None  # 校正角度 (度)
+
+    def add_measurement(self, angle, amplitude):
+        """
+        添加振动测量数据
+        :param angle: 测量角度 (度)
+        :param amplitude: 振动振幅 (mm/s)
+        """
+        self.measurements.append((angle, amplitude))
+
+    def calculate_correction(self):
+        """
+        计算校正质量和角度
+        使用影响系数法（两点法）计算单面动平衡
+        """
+        if len(self.measurements) < 2:
+            raise ValueError("至少需要两个测量点才能计算动平衡")
+
+        # 假设使用前两个测量点
+        angle1, amp1 = self.measurements[0]
+        angle2, amp2 = self.measurements[1]
+
+        # 将极坐标转换为复数 (振幅为模，角度为幅角)
+        z1 = amp1 * (math.cos(math.radians(angle1)) + 1j * math.sin(math.radians(angle1)))
+        z2 = amp2 * (math.cos(math.radians(angle2)) + 1j * math.sin(math.radians(angle2)))
+
+        # 两点法计算影响系数 (假设试重质量为1kg)
+        # 这里简化计算，假设两次测量是在添加试重前后进行的
+        delta_z = z2 - z1
+        influence_coefficient = delta_z / 1.0  # 试重质量为1kg
+
+        # 计算所需校正质量 (复数形式)
+        correction_complex = -z1 / influence_coefficient
+
+        # 转换为极坐标
+        self.correction_mass = abs(correction_complex) / self.correction_radius
+        self.correction_angle = math.degrees(math.atan2(correction_complex.imag, correction_complex.real))
+
+        # 确保角度在0-360度范围内
+        if self.correction_angle < 0:
+            self.correction_angle += 360
+
+    def get_correction(self):
+        """
+        获取校正质量和角度
+        :return: (校正质量, 校正角度)
+        """
+        if self.correction_mass is None or self.correction_angle is None:
+            self.calculate_correction()
+        return self.correction_mass, self.correction_angle
+
+    def print_results(self):
+        """
+        打印动平衡计算结果
+        """
+        if self.correction_mass is None or self.correction_angle is None:
+            self.calculate_correction()
+
+        print("==== 动平衡计算结果 ====")
+        print(f"校正质量: {self.correction_mass:.6f} kg")
+        print(f"校正角度: {self.correction_angle:.2f} 度")
+        print("=====================")
+
+        # 显示校正位置示意图
+        print("\n校正位置示意图:")
+        self._print_position_diagram()
+
+    def _print_position_diagram(self):
+        """
+        打印校正位置示意图
+        """
+        # 简化的极坐标示意图
+        radius = 10  # 示意图半径
+        angle_rad = math.radians(self.correction_angle)
+        x = int(radius * math.cos(angle_rad))
+        y = int(radius * math.sin(angle_rad))
+
+        # 创建一个简单的二维网格来显示位置
+        grid_size = 21  # 奇数大小，确保中心在网格中央
+        grid = [[' ' for _ in range(grid_size)] for _ in range(grid_size)]
+        center = grid_size // 2
+
+        # 标记中心和校正位置
+        grid[center][center] = 'O'
+        grid[center - y][center + x] = 'X'
+
+        # 绘制连接线
+        if x != 0 or y != 0:
+            # 使用 Bresenham 算法绘制直线
+            dx = abs(x)
+            dy = abs(y)
+            sx = 1 if x > 0 else -1
+            sy = 1 if y > 0 else -1
+            err = dx - dy
+
+            cx, cy = 0, 0
+            while cx != x or cy != y:
+                grid[center - cy][center + cx] = '*'
+                e2 = 2 * err
+                if e2 > -dy:
+                    err -= dy
+                    cx += sx
+                if e2 < dx:
+                    err += dx
+                    cy += sy
+
+        # 打印网格
+        for row in grid:
+            print(''.join(row))
+
+        # 标记方向
+        print(' ' * center + '↑ 0°/360°')
+        print(' ' * (center + radius) + '→ 90°')
+        print(' ' * center + '↓ 180°')
+        print(' ' * (center - radius) + '← 270°')
+
+
+# 示例用法
+if __name__ == "__main__":
+    # 创建动平衡计算器实例
+    balancing = DynamicBalancing(correction_radius=0.15)  # 校正半径 0.15m
+
+    # 添加测量数据 (角度, 振幅)
+    balancing.add_measurement(0, 0.52)    # 0度位置，振幅0.52 mm/s
+    balancing.add_measurement(180, 0.48)  # 180度位置，振幅0.48 mm/s
+
+    # 计算校正质量和角度
+    balancing.calculate_correction()
+
+    # 打印结果和示意图
+    balancing.print_results()
